@@ -6,7 +6,7 @@ from uuid import uuid4
 # -------------------------
 # CONFIG
 # -------------------------
-BANNED_WORDS = ["hate", "kill", "stupid"]
+BANNED_WORDS = ["hate", "kill", "stupid", "Hell", "fuck"]
 
 # -------------------------
 # IN-MEMORY DATABASE
