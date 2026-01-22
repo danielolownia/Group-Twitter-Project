@@ -96,7 +96,7 @@ BANNED_WORDS = [
     "hope",
     "wait",
     "stay",
-    "leave"
+    "leave", "a", "and"
 ]
 
 # -------------------------
