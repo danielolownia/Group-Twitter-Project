@@ -9,20 +9,22 @@ import os
 # CONFIG
 # -------------------------
 BANNED_WORDS = [
-    "hate", "kill", "stupid", "idiot", "dumb", "fool", "moron",
-    "loser", "bitch", "crap", "ass", "damn", "suck", "shut up",
-    "kill yourself", "die", "trash", "jerk", "ugly", "faggot", "slut", "whore",
-    "retard", "dick", "piss", "hell", "bastard", "I", "You", "me","why","a","and"
+    "hate", "kill", "stupid", "idiot", "dumb", "moron", "loser",
+    "bitch", "slut", "whore", "retard", "faggot",
+    "kill yourself", "die", "trash", "jerk", "ugly",
+    "asshole", "bastard", "piss", "dick"
 ]
 
 # -------------------------
-# DATABASE (permanent file)
+# DATABASE (persistent)
 # -------------------------
 DB_FILE = os.path.join(os.path.dirname(__file__), "mini_twitter.db")
 conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 c = conn.cursor()
 
-# Create tables if they don't exist
+# -------------------------
+# TABLES
+# -------------------------
 c.execute("""
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -47,25 +49,6 @@ CREATE TABLE IF NOT EXISTS likes (
     tweet_id TEXT,
     user_id TEXT,
     PRIMARY KEY (tweet_id, user_id)
-)
-""")
-
-c.execute("""
-CREATE TABLE IF NOT EXISTS follows (
-    follower_id TEXT,
-    following_id TEXT,
-    PRIMARY KEY (follower_id, following_id)
-)
-""")
-
-c.execute("""
-CREATE TABLE IF NOT EXISTS notifications (
-    id TEXT PRIMARY KEY,
-    user_id TEXT,
-    type TEXT,
-    from_user TEXT,
-    tweet_id TEXT,
-    ts REAL
 )
 """)
 
@@ -116,45 +99,6 @@ def logout():
     st.session_state.user_id = None
 
 # -------------------------
-# FOLLOW SYSTEM
-# -------------------------
-def follow_user(uid, target_username):
-    c.execute("SELECT id FROM users WHERE username=?", (target_username,))
-    row = c.fetchone()
-    if not row:
-        return "User not found."
-    tid = row[0]
-    if uid == tid:
-        return "Can't follow yourself."
-    try:
-        c.execute("INSERT INTO follows VALUES (?, ?)", (uid, tid))
-        conn.commit()
-        # Add notification
-        nid = str(uuid4())
-        c.execute(
-            "INSERT INTO notifications VALUES (?, ?, ?, ?, ?, ?)",
-            (nid, tid, "follow", get_username(uid), None, time.time())
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass
-    return f"You now follow {target_username}"
-
-def unfollow_user(uid, target_username):
-    c.execute("SELECT id FROM users WHERE username=?", (target_username,))
-    row = c.fetchone()
-    if not row:
-        return "User not found."
-    tid = row[0]
-    c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (uid, tid))
-    conn.commit()
-    return f"Unfollowed {target_username}"
-
-def get_following(uid):
-    c.execute("SELECT following_id FROM follows WHERE follower_id=?", (uid,))
-    return [row[0] for row in c.fetchall()]
-
-# -------------------------
 # TWEETS
 # -------------------------
 def create_tweet(uid, text):
@@ -177,38 +121,19 @@ def like_tweet(uid, tid):
     try:
         c.execute("INSERT INTO likes VALUES (?, ?)", (tid, uid))
         conn.commit()
-        # Add notification
-        nid = str(uuid4())
-        c.execute(
-            "INSERT INTO notifications VALUES (?, ?, ?, ?, ?, ?)",
-            (nid, get_tweet_author(tid), "like", get_username(uid), tid, time.time())
-        )
-        conn.commit()
     except sqlite3.IntegrityError:
-        pass
+        pass  # already liked
 
-def get_tweet_author(tid):
-    c.execute("SELECT author_id FROM tweets WHERE id=?", (tid,))
-    row = c.fetchone()
-    return row[0] if row else None
-
-def home_feed(uid):
-    following = get_following(uid) + [uid]
-    placeholders = ",".join("?" * len(following))
-    c.execute(f"""
+# -------------------------
+# GLOBAL FEED (ALL USERS)
+# -------------------------
+def home_feed():
+    c.execute("""
         SELECT t.id, t.author_id, t.content, t.ts,
                (SELECT COUNT(*) FROM likes WHERE tweet_id=t.id)
         FROM tweets t
-        WHERE t.author_id IN ({placeholders})
         ORDER BY t.ts DESC
-    """, tuple(following))
-    return c.fetchall()
-
-# -------------------------
-# NOTIFICATIONS
-# -------------------------
-def get_notifications(uid):
-    c.execute("SELECT type, from_user, tweet_id, ts FROM notifications WHERE user_id=? ORDER BY ts DESC", (uid,))
+    """)
     return c.fetchall()
 
 # -------------------------
@@ -220,11 +145,14 @@ if "user_id" not in st.session_state:
 # -------------------------
 # UI
 # -------------------------
-st.title(" Mini Twitter")
+st.title("🐦 Mini Twitter")
 
-menu = ["Register", "Login", "Feed", "Post Tweet", "Follow/Unfollow", "Notifications", "Logout"]
+menu = ["Register", "Login", "Feed", "Post Tweet", "Logout"]
 choice = st.sidebar.selectbox("Menu", menu)
 
+# -------------------------
+# REGISTER
+# -------------------------
 if choice == "Register":
     email = st.text_input("Email")
     username = st.text_input("Username")
@@ -232,6 +160,9 @@ if choice == "Register":
     if st.button("Register"):
         st.success(register(email, username, password))
 
+# -------------------------
+# LOGIN
+# -------------------------
 elif choice == "Login":
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -241,6 +172,9 @@ elif choice == "Login":
         else:
             st.error("Invalid login.")
 
+# -------------------------
+# POST
+# -------------------------
 elif choice == "Post Tweet":
     if not st.session_state.user_id:
         st.warning("Login first")
@@ -248,43 +182,28 @@ elif choice == "Post Tweet":
         text = st.text_area("What's happening?")
         if st.button("Post"):
             st.success(create_tweet(st.session_state.user_id, text))
+            st.rerun()
 
+# -------------------------
+# FEED
+# -------------------------
 elif choice == "Feed":
-    if not st.session_state.user_id:
-        st.warning("Login first")
-    else:
-        feed = home_feed(st.session_state.user_id)
-        for tid, author_id, content, ts, likes in feed:
-            st.write(f"**{get_username(author_id)}**: {content}")
-            st.write(f"❤️ {likes}")
-            if st.button(f"Like {tid}"):
+    feed = home_feed()
+    for tid, author_id, content, ts, likes in feed:
+        st.write(f"**{get_username(author_id)}**")
+        st.write(content)
+        st.write(f"❤️ {likes}")
+
+        if st.session_state.user_id:
+            if st.button("Like", key=f"like-{tid}"):
                 like_tweet(st.session_state.user_id, tid)
-                st.experimental_rerun()
+                st.rerun()
 
-elif choice == "Follow/Unfollow":
-    if not st.session_state.user_id:
-        st.warning("Login first")
-    else:
-        target = st.text_input("Username to follow/unfollow")
-        col1, col2 = st.columns(2)
-        if col1.button("Follow"):
-            st.success(follow_user(st.session_state.user_id, target))
-        if col2.button("Unfollow"):
-            st.success(unfollow_user(st.session_state.user_id, target))
+        st.divider()
 
-elif choice == "Notifications":
-    if not st.session_state.user_id:
-        st.warning("Login first")
-    else:
-        notifs = get_notifications(st.session_state.user_id)
-        for n_type, from_user, tweet_id, ts in notifs:
-            msg = f"{from_user} "
-            if n_type == "follow":
-                msg += "followed you"
-            elif n_type == "like":
-                msg += f"liked your tweet {tweet_id}"
-            st.write(msg)
-
+# -------------------------
+# LOGOUT
+# -------------------------
 elif choice == "Logout":
     logout()
     st.success("Logged out.")
