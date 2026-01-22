@@ -12,7 +12,7 @@ BANNED_WORDS = [
     "hate", "kill", "stupid", "idiot", "dumb", "fool", "moron",
     "loser", "bitch", "crap", "ass", "damn", "suck", "shut up",
     "kill yourself", "die", "trash", "jerk", "ugly", "faggot", "slut", "whore",
-    "retard", "dick", "piss", "hell", "bastard"
+    "retard", "dick", "piss", "hell", "bastard", "I", "You", "me","why","a","and"
 ]
 
 # -------------------------
