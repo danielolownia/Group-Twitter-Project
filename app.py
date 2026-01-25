@@ -81,6 +81,14 @@ def follower_count(uid):
     c.execute("SELECT COUNT(*) FROM follows WHERE following_id=?", (uid,))
     return c.fetchone()[0]
 
+# 🔹 NEW: check if user already liked a tweet
+def has_liked(uid, tid):
+    c.execute(
+        "SELECT 1 FROM likes WHERE tweet_id=? AND user_id=?",
+        (tid, uid)
+    )
+    return c.fetchone() is not None
+
 # -------------------------
 # AUTH
 # -------------------------
@@ -179,6 +187,14 @@ def like_tweet(uid, tid):
     except sqlite3.IntegrityError:
         pass
 
+# 🔹 NEW: unlike tweet
+def unlike_tweet(uid, tid):
+    c.execute(
+        "DELETE FROM likes WHERE tweet_id=? AND user_id=?",
+        (tid, uid)
+    )
+    conn.commit()
+
 # -------------------------
 # FEED
 # -------------------------
@@ -256,8 +272,6 @@ elif choice == "Feed":
     for tid, author, content, img, likes in home_feed():
         st.write(f"**{get_username(author)}** · {follower_count(author)} followers")
         st.write(content)
-
-        # ✅ LIKE COUNT DISPLAY (THE FIX)
         st.write(f"❤️ {likes} likes")
 
         if img:
@@ -265,9 +279,18 @@ elif choice == "Feed":
 
         col1, col2 = st.columns(2)
         if st.session_state.user_id:
-            if col1.button("Like", key=f"like-{tid}"):
-                like_tweet(st.session_state.user_id, tid)
+            liked = has_liked(st.session_state.user_id, tid)
+
+            if col1.button(
+                "💔 Unlike" if liked else "👍 Like",
+                key=f"like-{tid}"
+            ):
+                if liked:
+                    unlike_tweet(st.session_state.user_id, tid)
+                else:
+                    like_tweet(st.session_state.user_id, tid)
                 st.rerun()
+
             if author == st.session_state.user_id:
                 if col2.button("Delete", key=f"del-{tid}"):
                     delete_tweet(author, tid)
