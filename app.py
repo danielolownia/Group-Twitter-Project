@@ -256,7 +256,7 @@ if "user_id" not in st.session_state:
 # -------------------------
 # UI
 # -------------------------
-st.markdown('<h1 class="main-title">🐦 Mini Twitter</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-title">Mini Twitter</h1>', unsafe_allow_html=True)
 
 menu = ["Register", "Login", "Feed", "Post Tweet", "Follow / Unfollow", "Logout"]
 choice = st.sidebar.selectbox("Menu", menu)
