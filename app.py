@@ -13,15 +13,8 @@ st.markdown(
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@700&family=Inter:wght@400;600&display=swap');
 
-    header {
-        background: transparent;
-        box-shadow: none;
-    }
-
-    section[data-testid="stSidebar"] {
-        display: none;
-    }
-
+    header {background: transparent; box-shadow: none;}
+    section[data-testid="stSidebar"] {display: none;}
     .stAppViewMain > div:nth-child(1) {padding-top: 0rem;}
     [data-testid="stDecoration"] {display: none;}
 
@@ -55,24 +48,16 @@ st.markdown(
         border: 2px solid #0D47A1 !important;
         font-weight: bold;
         border-radius: 12px;
-        transition: 0.2s ease-in-out;
-    }
-
-    div.stButton > button:hover {
-        background-color: #0D47A1 !important;
-        border-color: white !important;
-        transform: scale(1.02);
     }
 
     div.stButton > button[key^="like-"] {
         width: 48px !important;
         height: 48px !important;
         border-radius: 50% !important;
-        padding: 0 !important;
         font-size: 20px !important;
     }
 
-    .stTextInput input, .stTextArea textarea, .stSelectbox div {
+    .stTextInput input, .stTextArea textarea {
         background-color: rgba(255,255,255,0.9) !important;
         color: #0D47A1 !important;
         border-radius: 10px !important;
@@ -145,7 +130,8 @@ conn.commit()
 # -------------------------
 # HELPERS
 # -------------------------
-def hash_pw(p): return hashlib.sha256(p.encode()).hexdigest()
+def hash_pw(p): 
+    return hashlib.sha256(p.encode()).hexdigest()
 
 def get_username(uid):
     c.execute("SELECT username FROM users WHERE id=?", (uid,))
@@ -214,7 +200,6 @@ def logout():
 def create_tweet(uid, text, img):
     last = st.session_state.last_post_time.get(uid, 0)
     now = time.time()
-
     if now - last < POST_COOLDOWN:
         return f"Wait {int(POST_COOLDOWN - (now - last))}s before posting again."
 
@@ -266,7 +251,7 @@ if "choice" not in st.session_state:
     st.session_state.choice = "Feed"
 
 # -------------------------
-# UI HEADER + NAV
+# HEADER + NAV
 # -------------------------
 st.markdown('<h1 class="main-title">🐦 Mini Twitter</h1>', unsafe_allow_html=True)
 
@@ -296,18 +281,25 @@ choice = st.session_state.choice
 # PAGES
 # -------------------------
 if choice == "Register":
-    st.success(register(
-        st.text_input("Email"),
-        st.text_input("Username"),
-        st.text_input("Password", type="password")
-    )) if st.button("Register") else None
-
-elif choice == "Login":
-    if st.button("Login"):
-        st.success("Logged in!") if login(
+    if st.button("Register"):
+        st.success(register(
+            st.text_input("Email"),
             st.text_input("Username"),
             st.text_input("Password", type="password")
-        ) else st.error("Invalid login")
+        ))
+
+elif choice == "Login":
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    # Login button ONLY shows after username is typed
+    if username.strip() != "":
+        if st.button("Login"):
+            if login(username, password):
+                st.success("Logged in!")
+                st.rerun()
+            else:
+                st.error("Invalid login")
 
 elif choice == "Post Tweet":
     if not st.session_state.user_id:
