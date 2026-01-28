@@ -6,21 +6,20 @@ from uuid import uuid4
 import os
 
 # -------------------------
-# GLOBAL STYLES (FIXED)
+# GLOBAL STYLES
 # -------------------------
 st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@700&family=Inter:wght@400;600&display=swap');
 
-    /* FIX: hide header visually but keep sidebar toggle alive */
     header {
-        visibility: hidden;
-        height: 0px;
+        background: transparent;
+        box-shadow: none;
     }
 
     section[data-testid="stSidebar"] {
-        top: 0px;
+        display: none;
     }
 
     .stAppViewMain > div:nth-child(1) {padding-top: 0rem;}
@@ -93,8 +92,7 @@ st.markdown(
 # -------------------------
 # CONFIG
 # -------------------------
-BANNED_WORDS = ["hate", "kill", "stupid"]
-POST_COOLDOWN = 20  # seconds
+POST_COOLDOWN = 20
 
 # -------------------------
 # DATABASE
@@ -170,7 +168,6 @@ def follow_user(uid, target_username):
     row = c.fetchone()
     if not row or row[0] == uid:
         return "Invalid user."
-
     try:
         c.execute("INSERT INTO follows VALUES (?, ?)", (uid, row[0]))
         conn.commit()
@@ -182,10 +179,7 @@ def unfollow_user(uid, target_username):
     c.execute("SELECT id FROM users WHERE username=?", (target_username,))
     row = c.fetchone()
     if row:
-        c.execute(
-            "DELETE FROM follows WHERE follower_id=? AND following_id=?",
-            (uid, row[0])
-        )
+        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (uid, row[0]))
         conn.commit()
         return f"You unfollowed @{target_username}"
     return "User not found."
@@ -195,20 +189,16 @@ def unfollow_user(uid, target_username):
 # -------------------------
 def register(email, username, password):
     try:
-        c.execute(
-            "INSERT INTO users VALUES (?, ?, ?, ?, ?)",
-            (str(uuid4()), email, username, hash_pw(password), time.time())
-        )
+        c.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?)",
+                  (str(uuid4()), email, username, hash_pw(password), time.time()))
         conn.commit()
         return "Account created."
     except sqlite3.IntegrityError:
         return "Username already taken."
 
 def login(username, password):
-    c.execute(
-        "SELECT id FROM users WHERE username=? AND password=?",
-        (username, hash_pw(password))
-    )
+    c.execute("SELECT id FROM users WHERE username=? AND password=?",
+              (username, hash_pw(password)))
     r = c.fetchone()
     if r:
         st.session_state.user_id = r[0]
@@ -219,23 +209,17 @@ def logout():
     st.session_state.user_id = None
 
 # -------------------------
-# TWEETS (WITH COOLDOWN)
+# TWEETS
 # -------------------------
 def create_tweet(uid, text, img):
-    if not text:
-        return "Tweet empty."
-
     last = st.session_state.last_post_time.get(uid, 0)
     now = time.time()
 
     if now - last < POST_COOLDOWN:
-        remaining = int(POST_COOLDOWN - (now - last))
-        return f"Wait {remaining}s before posting again."
+        return f"Wait {int(POST_COOLDOWN - (now - last))}s before posting again."
 
-    c.execute(
-        "INSERT INTO tweets VALUES (?, ?, ?, ?, ?)",
-        (str(uuid4()), uid, text, img, now)
-    )
+    c.execute("INSERT INTO tweets VALUES (?, ?, ?, ?, ?)",
+              (str(uuid4()), uid, text, img, now))
     conn.commit()
     st.session_state.last_post_time[uid] = now
     return "Tweet posted."
@@ -275,42 +259,56 @@ if "user_id" not in st.session_state:
 if "last_post_time" not in st.session_state:
     st.session_state.last_post_time = {}
 
+if "nav_open" not in st.session_state:
+    st.session_state.nav_open = False
+
+if "choice" not in st.session_state:
+    st.session_state.choice = "Feed"
+
 # -------------------------
-# UI
+# UI HEADER + NAV
 # -------------------------
 st.markdown('<h1 class="main-title">🐦 Mini Twitter</h1>', unsafe_allow_html=True)
 
-menu = ["Register", "Login", "Feed", "Post Tweet", "Follow / Unfollow", "Logout"]
-choice = st.sidebar.selectbox("Menu", menu)
+menu = ["Feed", "Post Tweet", "Follow / Unfollow", "Register", "Login", "Logout"]
 
-# FOLLOW
-if choice == "Follow / Unfollow":
-    if not st.session_state.user_id:
-        st.warning("Login first")
-    else:
-        target = st.text_input("Username")
-        col1, col2 = st.columns(2)
-        if col1.button("Follow"):
-            st.success(follow_user(st.session_state.user_id, target))
-        if col2.button("Unfollow"):
-            st.success(unfollow_user(st.session_state.user_id, target))
+col1, col2 = st.columns([1, 8])
 
-# REGISTER
-elif choice == "Register":
-    email = st.text_input("Email")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Register"):
-        st.success(register(email, username, password))
+with col1:
+    if st.button("☰"):
+        st.session_state.nav_open = not st.session_state.nav_open
 
-# LOGIN
+with col2:
+    st.markdown(f"### {st.session_state.choice}")
+
+if st.session_state.nav_open:
+    st.divider()
+    for item in menu:
+        if st.button(item, use_container_width=True):
+            st.session_state.choice = item
+            st.session_state.nav_open = False
+            st.rerun()
+
+st.divider()
+choice = st.session_state.choice
+
+# -------------------------
+# PAGES
+# -------------------------
+if choice == "Register":
+    st.success(register(
+        st.text_input("Email"),
+        st.text_input("Username"),
+        st.text_input("Password", type="password")
+    )) if st.button("Register") else None
+
 elif choice == "Login":
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
     if st.button("Login"):
-        st.success("Logged in!") if login(username, password) else st.error("Invalid login")
+        st.success("Logged in!") if login(
+            st.text_input("Username"),
+            st.text_input("Password", type="password")
+        ) else st.error("Invalid login")
 
-# POST
 elif choice == "Post Tweet":
     if not st.session_state.user_id:
         st.warning("Login first")
@@ -322,12 +320,22 @@ elif choice == "Post Tweet":
             st.success(msg) if "posted" in msg else st.error(msg)
             st.rerun()
 
-# FEED
+elif choice == "Follow / Unfollow":
+    if not st.session_state.user_id:
+        st.warning("Login first")
+    else:
+        target = st.text_input("Username")
+        col1, col2 = st.columns(2)
+        if col1.button("Follow"):
+            st.success(follow_user(st.session_state.user_id, target))
+        if col2.button("Unfollow"):
+            st.success(unfollow_user(st.session_state.user_id, target))
+
 elif choice == "Feed":
     for tid, author, content, img, likes in home_feed():
         st.write(f"**@{get_username(author)}** · {follower_count(author)} followers")
         st.write(content)
-        st.write(f"❤️ {likes} likes")
+        st.write(f"❤️ {likes}")
 
         col1, col2 = st.columns([1, 8])
         if st.session_state.user_id:
@@ -335,17 +343,14 @@ elif choice == "Feed":
             if col1.button("❤️" if liked else "♡", key=f"like-{tid}"):
                 unlike_tweet(st.session_state.user_id, tid) if liked else like_tweet(st.session_state.user_id, tid)
                 st.rerun()
-
             if author == st.session_state.user_id:
                 if col2.button("Delete", key=f"del-{tid}"):
                     delete_tweet(author, tid)
                     st.rerun()
-
         if img:
             st.image(img)
         st.divider()
 
-# LOGOUT
 elif choice == "Logout":
     logout()
     st.success("Logged out.")
